@@ -99,20 +99,29 @@ def DFS(start,goal,forbidden):
     print(shortestPath)
     print([item[0] for item in exploredForPrint])
 
-def DLS(start,depth):
+def DLS(start,goal,forbidden,depth):
+    count = 0
     visited = [(start,None)]
     # toExplore stores tuple of (state, parent of state, previous index that's been changed)
     toExplore = [(start,None,None)]
-    return visited if depth == 0
+    exploredForPrint = []
+    foundgoal = False
+    if depth == 0:
+        return {"found":foundgoal,"visited":visited, "explored":toExplore}
     dep = 0
     while (len(toExplore)>0):
         current = toExplore.pop(0)
         if current == "flag":
             dep -= 1
             continue
+        exploredForPrint.append(current)
         currentState,currentParent,prevPos = current[0],current[1],current[2]
         visitedState,parents = zip(*visited)
         candidates = []
+        if currentState == goal:
+            foundgoal = True
+            visited.append((currentState,currentParent))
+            break
         if dep < depth:
             if currentState not in visitedState:
                 candidates.extend(exploreChildren(currentState,prevPos))
@@ -120,17 +129,37 @@ def DLS(start,depth):
                 candidates.append("flag")
                 visited.append((currentState,currentParent))
                 if currentState == goal:
+                    foundgoal = True
                     break
             elif currentState is start:
                 candidates.extend(exploreChildren(currentState))
                 dep+=1
             a = list(filter(lambda x : x[0] not in forbidden, candidates))
             toExplore = a + toExplore
-
+    return {"found":foundgoal,"visited":visited, "explored":exploredForPrint}
 
 def IDS(start,goal,forbidden):
-
-
+    depth = 1
+    resultOfDLS = []
+    exploredForPrint = []
+    for x in range(0,depth):
+        resultOfDLS.append(DLS(start,goal,forbidden,x))
+        exploredForPrint.extend(resultOfDLS[x]["explored"])
+        if resultOfDLS[x]["found"]:
+            break
+    shortestPath = []
+    reverseCurrent = goal
+    visited = resultOfDLS[-1]["visited"]
+    while(reverseCurrent != start):
+        shortestPath.append(reverseCurrent)
+        for x in range(len(visited)):
+            if(visited[x][0] == reverseCurrent):
+                reverseCurrent = visited[x][1]
+                break
+    shortestPath.append(start)
+    shortestPath.reverse()
+    print(shortestPath)
+    print([item[0] for item in exploredForPrint])
 
 def readFile(filename):
     with open(filename,"r",encoding = "utf-8") as file:
@@ -145,6 +174,8 @@ def main():
         BFS(start_state,goal_state,forbidden_states)
     elif(search_method == "D"):
         DFS(start_state,goal_state,forbidden_states)
+    elif search_method == "I":
+        IDS(start_state,goal_state,forbidden_states)
 
 if __name__ == "__main__":
     main()
