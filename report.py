@@ -5,7 +5,7 @@ Created on Wed Jun 17 20:43:17 2020
 @author: xinjian.cao
 """
 import re,json,os,datetime
-from utility import get_line,isfloat,F,T,xt,workdays
+from utility import get_line,isfloat,F,T,xt,workdays,default_style
 
 class report:
     def __init__(self,name,date,config):
@@ -21,74 +21,20 @@ class report:
         self.shares = 0
         self.note = ' '
         self.totalIn = 0
-        self.securityPosition = 0
-        self.bondPosition = 0
         self.holdingList = []
         self.transactionList = [] #买卖成交分开
-        self.mergedTransactionList = [] #合并日内回转交易
+        self.mergedTransactionList = [] #合并所有交易（日内回转合并在一起）
         self.money_fund = []
         self.cash_management = []
-        self.rowNum = 0
         self.workBook = xt.Workbook(encoding='utf-8')
-        self.workSpace = slef.workBook.add_sheet(productName,cell_overwrite_ok=True)
+        self.workSpace = self.workBook.add_sheet(name,cell_overwrite_ok=True)
         self.filepath = '{}交易汇总\\'.format(date)
         self.workSpace.set_portrait(0)
         self.currentName = self.filepath+'{}每日交易汇总{}-自动.xls'.format(self.name,self.date_str)
         if not os.path.exists(self.filepath):
             os.mkdir(self.filepath)
     
-    def write_merge_row(self,mergelist,contentlist,stylelist):
-        assert (len(mergelist) == len(contentlist) and len(contentlist) == len(stylelist)), 'length of mergelist/contentlist/stylelist does not match!'
-        for i in range(len(mergelist)):
-            if(len(mergelist[i]) < 2):
-                self.workSpace.write(self.rowNum,mergelist[i][0],contentlist[i],stylelist[i])
-            else:
-                self.workSpace.write_merge(self.rowNum,self.rowNum,mergelist[i][0],mergelist[i][1],contentlist[i],stylelist[i])
-        self.rowNum += 1
-        
     
-    def write_header(self):
-        self.write_merge_row([(0,2),(3,5),(6,7),(8,9),(10,11)], 
-                ['名称',self.name+'私募基金','日期',self.date_dt.strftime("%Y/%m/%d"),
-                 workdays[int(self.date_dt.strftime('%w'))]], 
-                [F.a,F.a,F.a,F.a,F.a])
-    
-    def write_overview(self):
-        self.write_merge_row([(0,11)],['一、盘后账户情况'],[F.d])
-        self.write_merge_row([(0,2),(3,5),(6,8),(9,11)],['总资产',self.totalAsset,'总仓位（权益+可转债）',])
-    workSpace.write_merge(2,2,0,2,'总资产',F.b)
-    workSpace.write_merge(2,2,3,5,totalAsset,F.b)
-    workSpace.write_merge(2,2,6,8,'总仓位（权益+可转债）',F.b)
-    workSpace.write_merge(2,2,9,11,xt.Formula('J4+J5'),F.normal_percent)
-    
-    workSpace.write_merge(3,3,0,2,'可用资金（含逆回购）',F.b)
-    
-    workSpace.write_merge(4,4,0,2,'总盈亏',F.b)
-    workSpace.write_merge(4,4,3,5,xt.Formula('D3-D10*10000'),F.b)
-              
-    workSpace.write_merge(5,5,0,2,'可加仓资金（80%仓位）(万)',F.b)
-    workSpace.write_merge(5,5,3,5,xt.Formula('MIN(D4,(0.8-D7)*D3)/10000'),F.two_decimal)      
-    
-    workSpace.write_merge(5,5,6,8,'净值',F.b)
-    workSpace.write_merge(5,5,9,11,xt.Formula('D3/D9'),F.four_decimal)
-    
-    workSpace.write_merge(6,6,6,8,'当日盈亏',F.b)
-    workSpace.write_merge(6,6,9,11,xt.Formula('D3-{}'.format(lastDay['上日总资产'])),F.b)
-
-    workSpace.write_merge(7,7,0,2,'是否超限',F.b)
-    workSpace.write_merge(7,7,3,5,' ',F.b)
-    workSpace.write_merge(7,7,6,8,'当日盈亏比例',F.b)
-    workSpace.write_merge(7,7,9,11,xt.Formula('(D3-{})/{}'.format(lastDay['上日总资产'],lastDay['上日总资产'])),F.normal_percent)  
-    
-    workSpace.write_merge(8,8,0,2,'份额数',F.b)
-    workSpace.write_merge(8,8,3,5,lastDay['份额数'],F.c)
-    workSpace.write_merge(8,8,6,8,'月涨跌幅',F.b)
-    workSpace.write_merge(8,8,9,11,xt.Formula('J6/{}-1'.format(lastDay['上月末净值'])),F.normal_percent) 
-    
-    workSpace.write_merge(9,9,0,2,'总入金（万）',F.b)
-    workSpace.write_merge(9,9,3,5,lastDay['总入金'],F.c)
-    workSpace.write_merge(9,9,6,8,'年涨跌幅',F.b)
-    workSpace.write_merge(9,9,9,11,xt.Formula('J6/{}-1'.format(lastDay['去年净值'])),F.normal_percent)  
     def readYesterday(self,alldata):
         row = alldata.loc[self.name]
         self.prevTotalAsset = row['资产']
@@ -145,6 +91,7 @@ class report:
         for rowDict in dc.values():
             rowDict['成本价'] = 0 if rowDict['证券数量'] == 0 else rowDict['动用资金']/rowDict['证券数量']
             rowDict['当前价'] = 0 if rowDict['证券数量'] == 0 else rowDict['最新市值']/rowDict['证券数量']
+            rowDict['盈亏比例'] = (0 if rowDict['动用资金'] == 0 else rowDict['浮动盈亏']/(rowDict['动用资金']))
             self.holdingList.append(rowDict)
     
     def read_transactions(self,raw_transaction):
@@ -166,10 +113,8 @@ class report:
                 pos = headings.index(item)
                 headings[pos] = format_adj[item]
             index = headings.index('证券代码')
-            totalRevoke = 0
             for i in range(s_Row+1,len(lines)):
                 row = get_line(lines,i)
-                
                 if brokerName in weituo:
                     if any('撤单' in elem for elem in row):
                         continue
@@ -208,10 +153,11 @@ class report:
                     dc[item['证券名称']]['成交金额'] += item['成交数量']*item['成交价格']            
             for item in dc.values():
                 item['成交价格'] = item['成交金额'] / item['成交数量']
+                item['买买标志'] = direction
                 self.transactionList.append(item)
                 
         for rowDict in merged_dc.values():
-            if rowDict['成交数量'] == 0：:
+            if rowDict['成交数量'] == 0:
                 continue
             rowDict['买卖标志'] = '买入' if rowDict['成交数量'] > 0 else '卖出'
             rowDict['成交数量'] = abs(rowDict['成交数量'])
@@ -220,7 +166,7 @@ class report:
     def read_revoke(self,raw_revoke):
         for brokerName,lines in raw_revoke:
             headings = get_line(lines,0)
-            format_adj = json.loads(config.get(brokerName,'撤单格式'))
+            format_adj = json.loads(self.config.get(brokerName,'撤单格式'))
             for item in format_adj.keys():
                 pos = headings.index(item)
                 headings[pos] = format_adj[item]
@@ -230,77 +176,3 @@ class report:
                 rowDict = dict(zip(headings,row))
                 if '买入' in rowDict['买卖标志']:
                     self.totalAvailable += (rowDict['委托数量']-rowDict['成交数量'])*rowDict['委托价格']
-    def write_
-    def write_transactionOrder(workSpace,rowNum,transactionLs,executor):
-        dc = {}
-        for item in transactionLs:
-            sign = 1 if ('买入' in item['买卖标志']) else -1
-            if(item['证券名称'] not in dc.keys()):
-                dc[item['证券名称']] = sign*item['成交数量']
-            else:
-                dc[item['证券名称']] += sign*item['成交数量']
-        
-        '''
-        if len(dc) == 0:
-            rowNum = write_merge_row(workSpace, rowNum, [(0,),(1,3),(4,5),(6,7),(8,9),(10,11)], 
-                            [1,' ',' ',' ',' ',' '], 
-                            [F.b,F.b,F.b,F.b,F.b,F.b])
-        '''
-        
-        for i,item in enumerate(dc,1):
-            workSpace.write(rowNum,0,i,F.b)
-            direction = '买入' if (dc[item] > 0) else '卖出'
-            if dc[item] == 0:
-                continue
-            xiadaren = executor['下达人'] if executor else ' '
-            zhixingren = executor['执行人'] if executor else ' '
-            rowNum = write_merge_row(workSpace, rowNum, [(1,3),(4,5),(6,7),(8,9),(10,11)], 
-                            [direction+item+str(abs(int(dc[item])))+'股','9:30:00',xiadaren,zhixingren,'完成'], 
-                            [F.b,F.b,F.b,F.b,F.b])
-        return rowNum
-    
-    def write_securityTrans(workSpace,rowNum,transactionLs,direction):
-        write_merge_row(workSpace,rowNum,[(0,1),(2,),(3,4),(5,),(6,7),(8,),(9,)],
-                        ['序号','证券代码','证券名称','交易方向','交易数量','成交均价','收盘价'],
-                        [F.b,F.b,F.b,F.b,F.b,F.b,F.b])
-    
-        if (direction == "买入"):
-            workSpace.write_merge(rowNum,rowNum,10,11,'动用资金',F.b)
-        else:
-            workSpace.write_merge(rowNum,rowNum,10,11,'释放资金',F.b)
-        rowNum += 1
-        
-        ls = [x for x in transactionLs if (direction in x['买卖标志'])]
-        _sum = 0
-        
-        dc = {}
-        for item in ls:
-            if item['证券名称'] not in dc.keys():
-                dc[item['证券名称']] = item
-            else:
-                dc[item['证券名称']]['成交数量'] += item['成交数量']
-                dc[item['证券名称']]['成交金额'] += item['成交数量']*item['成交价格']
-                
-        if (len(dc) == 0):
-           rowNum = write_merge_row(workSpace,rowNum,[(0,1),(2,),(3,4),(5,),(6,7),(8,),(9,),(10,11)],
-                    [1,' ',' ',' ',' ',' ',' ',' '],
-                    [F.a,F.a,F.a,F.a,F.a,F.a,F.a,F.a])
-           
-        for i,item in enumerate(list(dc.values()),1):
-            item['买卖标志'] = direction
-            item['成交价格'] = item['成交金额'] / item['成交数量']
-            rowNum = write_merge_row(workSpace, rowNum, [(0,1),(2,),(3,4),(5,),(6,7),(8,),(9,),(10,11)], 
-                                     [i,item['证券代码'],item['证券名称'],item['买卖标志'],
-                                      item['成交数量'],item['成交价格'],' ',item['成交金额']], 
-                                     [F.b,F.b,F.b,F.b,F.b,F.b,F.b,F.b])
-            _sum += item['成交金额']
-        
-        if (direction == '买入'):
-            workSpace.write_merge(rowNum,rowNum,T.A,T.J,'合计动用资金',F.a)
-            workSpace.write_merge(rowNum,rowNum,10,11,_sum,F.b)
-        else:
-            workSpace.write_merge(rowNum,rowNum,T.A,T.J,'合计释放资金',F.a)
-            workSpace.write_merge(rowNum,rowNum,10,11,_sum,F.b)
-        rowNum += 1
-        
-        return (rowNum,_sum)
