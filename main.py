@@ -10,6 +10,7 @@ from utility import get_line,dongfangzhengquan_transaction,checkConfig,prev_week
 from factory import sheetFactory
 import os
 from datetime import datetime
+from report import report
 
 def helper(productName,args,config,alldata):
     revoke = hold = transaction = []
@@ -34,6 +35,19 @@ def helper(productName,args,config,alldata):
                 continue
             transaction.append((item[si:-4],lines))
         date = item[:8]
+        
+    report = report(productName,date,config)
+    report.read_holdings(hold)
+    report.read_transactions(transaction)
+    report.read_revokes(revoke)
+    producer = sheetFactory(report)
+    producer.cal_params()
+    row = producer.write_title(0)
+    row = producer.write_header(row)
+    row = producer.write_holdings(row)
+    row = producer.write_transactions(row)
+    producer.write_cash(row)
+    producer.save()
         
 def main():
     config = configparser.ConfigParser()
@@ -74,3 +88,6 @@ def main():
             os.remove(item)
     
     alldata.to_csv(r'配置文件\{}产品数据.csv'.format(date),encoding='gb18030')
+    
+if __name__ == '__main__':
+    main()

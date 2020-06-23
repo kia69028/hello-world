@@ -8,7 +8,7 @@ import re,json,os,datetime
 from utility import get_line,isfloat,F,T,xt,workdays,default_style
 
 class report:
-    def __init__(self,name,date,config):
+    def __init__(self,name,date,config,data):
         self.name = name
         self.date_str = date
         self.date_dt = datetime.datetime.strptime(date,'%Y%m%d')
@@ -31,11 +31,13 @@ class report:
         self.filepath = '{}交易汇总\\'.format(date)
         self.workSpace.set_portrait(0)
         self.currentName = self.filepath+'{}每日交易汇总{}-自动.xls'.format(self.name,self.date_str)
+        self.yesterdayData = data
         if not os.path.exists(self.filepath):
             os.mkdir(self.filepath)
+        print(self.currentName)
     
-    
-    def readYesterday(self,alldata):
+    def readYesterday(self):
+        alldata = self.yesterdayData
         row = alldata.loc[self.name]
         self.prevTotalAsset = row['资产']
         self.shares = row['份额']
@@ -163,7 +165,7 @@ class report:
             rowDict['成交数量'] = abs(rowDict['成交数量'])
             self.mergedTransactionList.append(rowDict)    
         
-    def read_revoke(self,raw_revoke):
+    def read_revokes(self,raw_revoke):
         for brokerName,lines in raw_revoke:
             headings = get_line(lines,0)
             format_adj = json.loads(self.config.get(brokerName,'撤单格式'))
